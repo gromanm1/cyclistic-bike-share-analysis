@@ -1,0 +1,719 @@
+---
+title: "Cyclistic Bike-Share Analysis: Comparing Casual Riders and Annual Members Using R"
+author: "Gabriel D. Román Meléndez"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+---
+
+
+
+# Introduction
+
+Cyclistic is a Chicago-based bike-share company with over 5,800 bicycles and 600 docking stations. The company's flexible rental options include single-ride passes, full-day passes, and annual memberships. While casual riders contribute significantly to overall ridership, Cyclistic has identified annual memberships as substantially more profitable. 
+
+The marketing team, led by Lily Moreno, believes there is considerable opportunity to convert casual riders into annual members. To do this effectively, Cyclistic must first explicitly understand the behavioral differences between casual riders and annual members. This analysis focuses explicitly on identifying these differences in usage patterns to inform targeted marketing strategies aimed clearly at converting casual riders into loyal annual members, thus maximizing Cyclistic’s profitability and growth.
+
+# Executive Summary
+
+This analysis clearly identifies distinct usage behaviors between Cyclistic’s casual riders and annual members. Casual riders exhibit longer, leisure-oriented rides predominantly on weekends and demonstrate increasing engagement from winter to spring. Annual members consistently engage in shorter, weekday rides, indicating commuting habits. Three strategic recommendations emerged: 
+
+- Launch targeted weekend and seasonal promotions for casual riders.
+- Develop explicit weekday-focused campaigns to attract commuter-oriented casual riders.
+- Implement personalized engagement and loyalty incentives. 
+
+These recommendations offer Cyclistic a path to maximize annual membership conversions and increase profitability.
+
+
+# Ask Phase
+
+## Identify the Problem
+
+The Cyclistic marketing team wants to understand how **annual members** and **casual riders** differ in their usage patterns. Understanding these differences will help create targeted marketing strategies aimed at converting casual riders into annual members.
+
+## Purpose and Value of Insights
+
+Insights from the analysis will enable the Cyclistic marketing team to:
+
+- Craft targeted marketing messages specifically appealing to casual riders.
+- Design incentives and promotional campaigns encouraging casual riders to choose annual memberships.
+- Improve customer retention and maximize annual membership revenue.
+
+## Key Stakeholders
+
+- **Cyclistic Marketing Analytics Team:** Responsible for data analysis, insight generation, and reporting.
+- **Lily Moreno, Director of Marketing:** Responsible for overseeing marketing strategy, campaigns, and approving insights-based actions.
+- **Cyclistic Executive Team:** Decision-makers responsible for approving strategic marketing campaigns based on data-driven insights.
+
+## Business Task
+
+- Analyze historical Cyclistic bike-share usage data to from Q1 2019 and Q1 2020 to identify and highlight differences in usage behavior between casual riders and annual members. 
+- Generate actionable insights that inform targeted marketing strategies to convert casual riders into annual members, driving increased revenue and sustainable business growth.
+
+
+
+# Prepare Phase
+
+## Data Sources and Location
+
+- **Data Source:** Historical Cyclistic bike-share trip data provided by Motivate International Inc.
+- **Datasets:** 
+  - **Divvy 2019 Q1**
+  - **Divvy 2020 Q1**
+- **Storage Location:** GitHub environment at *~/Documents/GitHub/dataAnalytics_caseStudy/data_caseStudy1*
+
+## Data Organization and Content
+
+- **File Format:** CSV  
+- **Data Structure:** Each row represents a single bike trip and includes:
+  - Trip identifiers and rider type (casual/member)
+  - Trip timestamps (start/end)
+  - Station IDs and names (origin/destination)
+  - Geographic coordinates (latitude/longitude)
+  - Trip durations (when provided)
+
+## Data Quality and Credibility (ROCCC Assessment)
+
+- **Reliable:** Official Cyclistic data.
+- **Original:** Direct from source.
+- **Comprehensive:** All essential fields included.
+- **Current:** Covers relevant periods (2019 Q1, 2020 Q1).
+- **Cited:** Attribution clearly provided.
+
+## Licensing, Privacy, Security, and Accessibility
+
+- **Licensing:** Authorized by Motivate International Inc.
+- **Privacy:** No personally identifiable information.
+- **Security:** Secure storage environment.
+- **Accessibility:** Publicly available via Google's educational platform.
+
+
+
+# Process Phase
+
+Below is explicit documentation of each cleaning step, rationale included:
+
+
+## Tools Chosen and Rationale
+
+- **Tools:** R, Tidyverse (`dplyr`, `lubridate`), `janitor`, `hms`
+- **Rationale:** Efficient handling of large datasets, powerful data manipulation capabilities, strong community support, readability.
+
+## Data Loading
+
+_Load datasets explicitly:_
+
+```{r load_data}
+# Load essential libraries for data manipulation, cleaning, and visualization
+library(tidyverse)   # data manipulation and visualization
+library(janitor)     # cleaning and standardizing column names
+library(hms)         # handling time components separately
+library(ggpubr)      # creating clear, publication-ready visualizations
+
+# Define the directory path containing raw CSV files
+path_input <- "~/Documents/GitHub/cyclistic-bike-share-analysis/data"
+
+# Retrieve the file paths for CSV datasets
+csv_files <- list.files(path = path_input, pattern = "\\.csv$", full.names = TRUE)
+
+# Load datasets into a named list
+df_list <- csv_files %>% 
+  set_names(c("df1", "df2")) %>%
+  map(read_csv)
+
+# Assign datasets to clearly named variables for easy referencing
+df_2019 <- df_list$df1
+df_2020 <- df_list$df2
+```
+
+## Preliminary Column Compatibility Check
+
+_To ensure we could safely merge datasets, we visually inspected critical columns:_
+
+```{r preliminary_analysis}
+# Inspect columns visually for compatibility between datasets
+df_2019 %>% select(trip_id, usertype, start_time, end_time) %>% head()
+df_2020 %>% select(ride_id, member_casual, started_at, ended_at) %>% head()
+```
+
+- Verified compatibility of key columns for successful merging.
+
+## Column Renaming & Data Type Standardization
+
+_Standardized column names and data types for consistency:_
+
+```{r clean_columns}
+# Clean and standardize 2019 data columns to match 2020 data
+df_2019 <- df_2019 %>% 
+  clean_names() %>% 
+  rename(
+    ride_id = trip_id,
+    started_at = start_time,
+    ended_at = end_time,
+    start_station_id = from_station_id,
+    start_station_name = from_station_name,
+    end_station_id = to_station_id,
+    end_station_name = to_station_name,
+    member_casual = usertype
+  ) %>%
+  mutate(
+    ride_id = as.character(ride_id),
+    started_at = as.POSIXct(started_at),
+    ended_at = as.POSIXct(ended_at),
+    member_casual = recode(member_casual, "Subscriber" = "member", "Customer" = "casual")
+  )
+
+# Ensure consistent data types in 2020 data
+df_2020 <- df_2020 %>% 
+  clean_names() %>%
+  mutate(
+    ride_id = as.character(ride_id),
+    started_at = as.POSIXct(started_at),
+    ended_at = as.POSIXct(ended_at)
+  )
+```
+
+## Verify Column Compatibility Post-cleaning
+
+_Verified full column alignment after standardization:_
+
+```{r check_compatibility}
+# Verify column alignment post-cleaning
+setdiff(names(df_2019), names(df_2020))
+setdiff(names(df_2020), names(df_2019))
+```
+
+- Confirmed dataset alignment clearly post-cleaning.
+
+## Trip Duration Quality Control
+
+**Rationale:**  
+The 2019 dataset had a provided `tripduration` column, but 2020 did not. To maintain consistency, we recalculated durations explicitly from timestamps for both datasets. A QC check was performed to ensure the reliability of recalculated values against the provided values in 2019.
+
+```{r duration_qc}
+# Recalculate trip durations explicitly from timestamps for consistency and accuracy
+df_2019 <- df_2019 %>%
+  mutate(
+    tripduration_provided = as.integer(gsub(",", "", tripduration)),
+    tripduration_calculated = as.integer(difftime(ended_at, started_at, units = "secs")),
+    duration_match = tripduration_provided == tripduration_calculated
+  )
+
+# Identify and review mismatches between provided and calculated durations
+if(any(!df_2019$duration_match, na.rm = TRUE)){
+  mismatches <- df_2019 %>% filter(!duration_match)
+  mismatch_pct <- mismatches %>%
+    mutate(pct_diff = abs(tripduration_provided - tripduration_calculated)/tripduration_calculated*100)
+  
+  cat("Mismatched durations detected. Percent differences range from", 
+      min(mismatch_pct$pct_diff), "% to", 
+      max(mismatch_pct$pct_diff), "%.\n")
+} else {
+  cat("All trip durations match.\n")
+}
+
+# Determined discrepancies were negligible (<0.001%). Remove unnecessary duration columns and retain calculated values.
+df_2019 <- df_2019 %>% 
+  select(-tripduration, -tripduration_provided, -duration_match)
+
+# Calculate durations explicitly for 2020 dataset
+df_2020 <- df_2020 %>%
+  mutate(tripduration_calculated = as.integer(difftime(ended_at, started_at, units = "secs")))
+```
+
+- Observed mismatches and concluded discrepancies were negligible (<0.001%). We confidently proceeded exclusively with recalculated durations.
+
+## Missing Values (NA) Inspection & Resolution
+
+**Rationale:**  
+Carefully reviewed missing values (NAs) to assess potential impacts.
+
+- **2019 Dataset:**  
+  - Most NAs in demographic columns (`gender`, `birth_year`).  
+  - Retained these records as missing demographics likely due to incomplete optional user profiles, not critical to the analysis.
+
+- **2020 Dataset:**  
+  - Identified a single problematic record (NAs in key fields plus negative duration), clearly an erroneous entry. Removed this record confidently.
+
+```{r na_inspection}
+# Function to summarize missing values clearly by dataset
+na_summary <- function(df, year) {
+  df %>%
+    summarise(across(everything(), ~sum(is.na(.)))) %>%
+    pivot_longer(everything(), names_to = "column", values_to = "na_count") %>%
+    filter(na_count > 0) %>%
+    arrange(desc(na_count)) %>%
+    mutate(year = year)
+}
+
+# Review NA summaries
+print("NA Summary (2019):")
+print(na_summary(df_2019, "2019"))
+
+print("NA Summary (2020):")
+print(na_summary(df_2020, "2020"))
+
+# Inspect problematic row in 2020
+na_rows_2020 <- df_2020 %>% 
+  filter(is.na(end_station_id) | is.na(end_lat) | is.na(end_lng))
+
+print("Problematic NA row (2020 dataset):")
+print(na_rows_2020)
+
+# Identify and remove clearly problematic rows in the 2020 dataset
+df_2020 <- df_2020 %>%
+  filter(!(is.na(end_station_id) | is.na(end_lat) | is.na(end_lng)))
+```
+
+## Final Dataset Integration & Checks
+
+_Integrated the datasets, split timestamps into separate date/time columns explicitly, determined start day of the week, and verified integrity:_
+
+```{r combine_datasets}
+# Combine cleaned datasets and create additional analytical columns
+df_combined <- bind_rows(df_2019, df_2020) %>%
+  rename(tripduration = tripduration_calculated) %>%
+  mutate(
+    start_date = as.Date(started_at),
+    end_date = as.Date(ended_at),
+    start_time = as_hms(started_at),
+    end_time = as_hms(ended_at),
+    start_day = weekdays(start_date)
+  ) %>%
+  select(ride_id, member_casual, started_at, ended_at, start_day, start_date, start_time, end_date, end_time, tripduration, everything())
+
+# Ensure days of the week are ordered properly for clarity
+df_combined$start_day <- factor(
+  df_combined$start_day, 
+  levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"), ordered = TRUE
+  )
+
+# Final dataset integrity check
+stopifnot(nrow(df_combined) == nrow(df_2019) + nrow(df_2020))
+
+# Quick inspection of final dataset structure
+glimpse(df_combined)
+```
+
+## Verification of Data Cleanliness
+
+- No unresolved critical missing values.
+- Data types clearly standardized.
+- Columns clearly aligned and verified.
+- Row count validated.
+
+**Outcome:**  
+The final combined data set (`df_combined`) is rigorously cleaned, standardized, and explicitly documented, ready for reliable analysis of casual versus annual rider behaviors.
+
+
+
+# Analyze Phase
+
+Now that our data is cleaned, standardized, and combined (`df_combined`), we proceed with analysis to uncover trends, relationships, and insights distinguishing between **casual riders** and **annual members**.
+
+## Descriptive Statistics on Ride Metrics
+
+### Mean Ride Length by User Type
+
+Calculate the average ride length explicitly for casual riders and members.
+
+```{r stats_rideLength_mean}
+# Average Ride Duration by Rider Type
+stats_rideLength_mean <- df_combined %>%
+  group_by(member_casual) %>%
+  summarize(mean_duration_minutes = mean(tripduration, na.rm = TRUE)/60)
+
+print(stats_rideLength_mean)
+```
+
+### Maximum Ride Length by User Type
+
+Identify the maximum recorded ride duration clearly for each rider type.
+
+```{r stats_rideLength_max}
+# Maximum Ride Duration by Rider Type
+stats_rideLength_max <- df_combined %>%
+  group_by(member_casual) %>%
+  summarize(max_duration_minutes = max(tripduration, na.rm = TRUE)/60)
+
+print(stats_rideLength_max)
+```
+
+### Mode of Day of the Week
+
+Determine the most frequently occurring day of the week explicitly for rides overall.
+
+```{r stats_weekDay_mode}
+# Most Frequent Ride Day
+stats_weekDay_mode <- df_combined %>%
+  count(start_day) %>%
+  arrange(desc(n)) %>%
+  slice(1)
+
+print(stats_weekDay_mode)
+```
+
+### Average Ride Length by User Type Alone
+
+```{r user_avgLength}
+# Average ride duration in minutes for each user type (casual vs. member)
+user_avgLength <- df_combined %>%
+  group_by(member_casual) %>%
+  summarize(average_duration_minutes = mean(tripduration, na.rm = TRUE)/60)
+
+print(user_avgLength)
+```
+
+
+## Trends and Relationships by Day of Week
+
+Analyze ride behavior explicitly across different weekdays to reveal clear patterns.
+
+### Average Ride Length by both Day of Week and User Type
+
+Evaluate explicitly how average ride duration vary by weekday and rider type.
+
+```{r dayUser_avgLength}
+# Evaluate average ride duration (in minutes) explicitly segmented by rider type across each weekday
+dayUser_avgLength <- df_combined %>%
+  group_by(member_casual, start_day) %>%
+  summarize(average_duration_minutes = mean(tripduration, na.rm = TRUE)/60) %>%
+  pivot_wider(names_from = start_day, values_from = average_duration_minutes)
+
+print(dayUser_avgLength)
+```
+
+### Total Number of Rides by both Day of Week and User Type
+
+Identify how total rides clearly vary across weekdays, explicitly distinguishing casual riders from annual members.
+
+```{r dayUser_totalRides}
+# Calculate total ride counts explicitly segmented by rider type across each weekday
+dayUser_totalRides <- df_combined %>%
+  group_by(member_casual, start_day) %>%
+  summarize(total_rides = n()) %>%
+  pivot_wider(names_from = start_day, values_from = total_rides)
+
+print(dayUser_totalRides)
+```
+
+## Trends by Q1 Month
+
+To explore overall impacts during Q1, analyze the ride behaviors explicitly by month.
+
+### Add Month Column
+
+Create a clear month-based categorization.
+
+```{r add_month_column}
+# Monthly Trends
+df_combined <- df_combined %>%
+  mutate(month = month(started_at, label = TRUE, abbr = FALSE))
+
+head(df_combined %>% select(started_at, month))
+```
+
+### Average Ride Length by Q1 Month and User Type
+
+Evaluate how monthly ride duration explicitly varies by rider type.
+
+```{r monthUser_avgLength}
+# Calculate the average ride duration (minutes) explicitly segmented by month and rider type
+monthUser_avgLength <- df_combined %>%
+  group_by(member_casual, month) %>%
+  summarize(avg_duration_minutes = mean(tripduration, na.rm = TRUE)/60) %>%
+  pivot_wider(names_from = month, values_from = avg_duration_minutes)
+
+print(monthUser_avgLength)
+```
+
+### Total Rides by Q1 Month and User Type
+
+Summarize how total ride counts clearly vary by month, differentiating explicitly between rider categories.
+
+```{r monthUser_totalRides}
+# Calculate total number of rides explicitly segmented by month and rider type
+monthUser_totalRides <- df_combined %>%
+  group_by(member_casual, month) %>%
+  summarize(total_rides = n()) %>%
+  pivot_wider(names_from = month, values_from = total_rides)
+
+print(monthUser_totalRides)
+```
+
+## Summary of Analytical Observations
+
+### Key Insights:
+
+- **Average Ride Duration:**
+  - Casual riders have significantly longer average ride durations (**84.8 minutes**) compared to annual members (**13.3 minutes**).  
+  This suggests casual users primarily engage in leisure activities, while members use bikes predominantly for commuting.
+
+- **Maximum Ride Duration:**
+  - Casual riders recorded a notably higher maximum ride duration (**177,200 minutes**, approximately **123 days**) compared to annual members (**101,607 minutes**, approximately **70 days**), likely indicating outliers or unusual prolonged usage.
+
+- **Mode of Day of the Week (Most Frequent):**
+  - **Tuesday** had the highest overall number of rides (**135,966 rides**), largely driven by annual members' commuting habits.
+
+- **Ride Duration Patterns by Day of the Week:**
+  - Casual riders consistently take longer rides on **Thursday (128.8 minutes)** and weekends (**~84 minutes**), aligning clearly with leisure and recreational usage.
+  - Annual members exhibit stable, shorter durations throughout weekdays (**~12–14 minutes**), slightly increasing on weekends (**~16 minutes**), indicating consistent commuting behavior.
+
+- **Total Number of Rides by Day of the Week:**
+  - Casual rider counts sharply increase during weekends, peaking on **Sunday (18,652 rides)**.
+  - Annual members predominantly use bikes on weekdays, particularly **Tuesday (127,974 rides)** and **Thursday (125,228 rides)**.
+
+- **Monthly Ride Duration Trends (Q1 Analysis):**
+  - Casual riders display higher average durations in colder months: **January (119.2 minutes)**, **February (130.6 minutes)**, decreasing significantly in **March (58.9 minutes)** as weather improves.
+  - Annual members maintain consistent, shorter ride durations (**~13 minutes**) throughout Q1, reflecting regular commuting behavior irrespective of weather.
+
+- **Total Monthly Ride Counts (Q1 Analysis):**
+  - Casual ridership notably increases from **January (12,387 rides)** to **March (43,747 rides)**, indicating clear seasonal trends.
+  - Annual members consistently maintain high usage throughout Q1, ranging from **234,769 rides** in January to **265,281 rides** in March, with moderate increases toward spring.
+
+### Business Implications:
+
+- Target **weekend** and **early-spring promotions** explicitly toward casual riders to convert leisure-oriented riders into annual subscribers.
+- Highlight **annual membership benefits** to casual riders commuting during weekdays, emphasizing consistent convenience and potential cost savings.
+- Utilize identified seasonal and daily usage patterns to strategically schedule targeted marketing campaigns, maximizing conversion opportunities.
+
+
+
+# Share Phase
+
+The visualizations presented here clearly illustrate the explicit differences in usage patterns between **casual riders** and **annual members**. The insights are strategically designed to support Cyclistic's executive team in decision-making around targeted marketing strategies.
+
+## Average Ride Duration by Rider Type
+
+Illustrate the difference in average ride lengths between casual riders and annual members.
+
+```{r avg_duration_ggpubr}
+# Summarize the average ride duration in minutes by rider type
+df_plot <- df_combined %>%
+  group_by(member_casual) %>%
+  summarize(avg_duration_minutes = mean(tripduration) / 60)
+
+# Bar plot illustrating the explicit difference in average ride length
+ggbarplot(
+  df_plot,
+  x = "member_casual",
+  y = "avg_duration_minutes",
+  fill = "member_casual",
+  color = "member_casual",
+  palette = "lancet",
+  label = round(df_plot$avg_duration_minutes, 0),
+  lab.pos = "out",
+  lab.size = 3.5,
+  xlab = "Rider Type",
+  ylab = "Average Duration (Minutes)",
+  legend.title = "Rider Type",
+  title = "Average Ride Duration by Rider Type"
+  ) 
+```
+
+## Average Ride Duration by Day of Week and Rider Type
+
+Highlights weekday vs weekend differences between casual riders and members.
+
+```{r avg_duration_day_ggpubr}
+# Calculate average ride duration by day of the week and rider type
+df_plot <- df_combined %>%
+  group_by(member_casual, start_day) %>%
+  summarize(avg_duration_minutes = round(mean(tripduration, na.rm = TRUE) / 60, 0), .groups = 'drop')
+
+# Bar plot explicitly comparing weekday vs weekend ride durations
+ggbarplot(
+  df_plot,
+  x = "start_day",
+  y = "avg_duration_minutes",
+  fill = "member_casual",
+  color = "member_casual",
+  palette = "lancet",
+  position = position_dodge(),
+  label = TRUE,
+  lab.size = 3.5,
+  xlab = "Day of Week",
+  ylab = "Average Duration (Minutes)",
+  legend.title = "Rider Type",
+  title = "Average Ride Duration by Day of Week and Rider Type"
+  ) 
+```
+
+## Total Number of Rides by Day of Week and Rider Type
+
+Illustrates rider preference by weekdays and weekends.
+
+```{r total_rides_day_ggpubr}
+# Summarize total number of rides explicitly grouped by day of week and rider type
+df_plot <- df_combined %>%
+  group_by(member_casual, start_day) %>%
+  summarize(total_rides = n())
+
+# Bar plot clearly highlighting rider preference across the weekdays and weekends
+ggbarplot(
+  df_plot,
+  x = "start_day",
+  y = "total_rides",
+  fill = "member_casual",
+  color = "member_casual",
+  palette = "lancet",
+  position = position_dodge(),
+  label = TRUE,
+  lab.size = 3.5,
+  xlab = "Day of Week",
+  ylab = "Total Rides",
+  legend.title = "Rider Type",
+  title = "Total Number of Rides by Day of Week"
+  )
+```
+
+## Monthly Trends in Ride Counts by Rider Type
+
+Illustrates seasonal differences in ridership.
+
+```{r monthly_rides_ggpubr}
+# Summarize total ride counts explicitly grouped by month and rider type
+df_plot <- df_combined %>%
+  group_by(member_casual, month) %>%
+  summarize(total_rides = n(), .groups = 'drop')
+
+# Ensure months are clearly ordered for accurate seasonal analysis
+df_plot$month <- factor(df_plot$month, levels = month.name, ordered = TRUE)
+
+# Bar plot illustrating seasonal differences in rider counts explicitly
+ggbarplot(
+  df_plot,
+  x = "month",
+  y = "total_rides",
+  fill = "member_casual",
+  color = "member_casual",
+  palette = "lancet",
+  position = position_dodge(),
+  label = TRUE,
+  lab.size = 3.5,
+  xlab = "Month",
+  ylab = "Total Rides",
+  legend.title = "Rider Type",
+  title = "Total Number of Rides by Month"
+  )
+```
+
+## Percentage Share of Rides by Rider Type and Month
+
+Ilustrate how the proportion of casual riders relative to annual members shifts throughout Q1, emphasizing seasonal trends and strategic marketing opportunities.
+
+```{r percentage_share_rides_month, echo=TRUE}
+# Calculate the percentage share of total rides for each rider type explicitly by month
+df_plot <- df_combined %>%
+  group_by(month, member_casual) %>%
+  summarize(total_rides = n(), .groups = 'drop') %>%
+  group_by(month) %>%
+  mutate(percent_share = total_rides / sum(total_rides) * 100)
+
+# Convert month to clearly ordered factor for intuitive plotting
+df_plot$month <- factor(df_plot$month, levels = month.name, ordered = TRUE)
+
+# Bar plot clearly illustrating monthly shifts in casual vs annual rider proportions
+ggbarplot(
+  df_plot,
+  x = "month",
+  y = "percent_share",
+  fill = "member_casual",
+  color = "member_casual",
+  palette = "lancet",
+  position = position_dodge(),
+  label = round(df_plot$percent_share, 1),
+  lab.size = 3.5,
+  lab.pos = "out",
+  xlab = "Month",
+  ylab = "Percentage (%)",
+  legend.title = "Rider Type",
+  title = "Percentage Share of Rides by Month and Rider Type"
+  )
+```
+
+
+
+# Act Phase
+
+Based on the comprehensive analysis and visualizations provided, we now clearly outline actionable recommendations to guide Cyclistic’s strategic marketing decisions.
+
+## Final Conclusion
+
+The analysis explicitly highlights substantial differences between **casual riders** and **annual members**:
+
+- **Casual riders** predominantly take longer leisure rides, especially on weekends, and show a notable increase in ride frequency as winter transitions to spring.
+- **Annual members** consistently exhibit shorter, frequent rides concentrated during weekdays, aligning clearly with commuting patterns.
+
+These clear distinctions present Cyclistic with targeted opportunities for marketing campaigns explicitly designed to convert casual riders into annual members.
+
+## Top Three Recommendations
+
+### Launch Weekend and Seasonal Promotional Campaigns
+
+**Insight:**  
+Casual riders clearly prefer longer, leisure-oriented rides on weekends and increasingly ride from January through March.
+
+**Recommendation:**  
+Create targeted weekend and seasonal membership promotions, explicitly incentivizing casual riders with special discounts or time-limited offers during peak leisure periods.
+
+### Target Commuter Conversion with Weekday-Focused Campaigns
+
+**Insight:**  
+Annual members exhibit regular, short weekday rides indicative of commuting behavior, whereas casual riders might commute occasionally without annual commitment.
+
+**Recommendation:**  
+Develop explicit commuter-oriented messaging highlighting cost-effectiveness, convenience, reliability, and long-term savings associated with annual memberships to convert casual riders into regular commuting members.
+
+
+### Personalize Engagement and Loyalty Incentives
+
+**Insight:**  
+Casual riders’ longer rides indicate significant opportunities for personalized engagement and incentive-based loyalty programs.
+
+**Recommendation:**  
+Implement explicit personalized incentive programs, such as loyalty points, discounts on long-duration rides, or milestone-based rewards to increase rider engagement and encourage casual riders to convert to annual membership.
+
+## Application of Insights by the Business
+
+The Cyclistic team can explicitly leverage these insights as follows:
+
+- **Marketing Analytics Team:**  
+  - Utilize these clear rider distinctions to refine segmentation and create targeted, behavior-driven campaigns.
+
+- **Marketing Director (Lily Moreno):**  
+  - Explicitly allocate marketing budgets toward high-impact seasonal and commuter-focused campaigns, guided directly by insights.
+
+- **Executive Team:**  
+  - Base strategic marketing decisions explicitly on data-supported evidence to confidently approve campaigns designed for maximum conversion effectiveness and revenue growth.
+
+## Recommended Next Steps
+
+To effectively implement these recommendations, stakeholders should:
+
+- **Pilot Testing:**  
+  Launch initial campaigns explicitly targeted at select neighborhoods to evaluate effectiveness before broader implementation.
+
+- **Performance Tracking:**  
+  Clearly define and measure performance metrics, including conversion rates, membership growth, and ROI, over specific evaluation periods (3-6 months).
+
+- **Continuous Optimization:**  
+  Regularly review and update campaigns based on newly gathered data, clearly ensuring sustained effectiveness and relevance.
+
+## Additional Data for Further Analysis
+
+Collecting the following explicit additional data could further enhance strategic clarity:
+
+- **Rider Demographic Data:**  
+  Age, income, residential area, and preferences for improved targeting.
+
+- **Qualitative Feedback:**  
+  Rider surveys explicitly capturing motivations and barriers to annual membership adoption.
+
+- **Competitive Market Analysis:**  
+  Data on competitor promotions and market trends for ongoing strategic advantage.
+
+
+
